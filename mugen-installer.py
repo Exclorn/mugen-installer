@@ -12,11 +12,11 @@ import sys
 # 1. Set the full path to your MUGEN game folder.
 #    Example (Windows): "C:/Users/YourUser/Games/mugen-1.1b1"
 #    Example (macOS/Linux): "/home/youruser/games/mugen"
-MUGEN_PATH = "C:/path/to/your/mugen" 
+MUGEN_PATH = "F:\Games\The Queen Of Fighters" 
 
 # 2. Set the path to the folder where you download your character archives.
 #    The script will scan this folder for .zip, .rar, and .7z files.
-DOWNLOADS_PATH = "C:/path/to/your/downloads/mugen_chars"
+DOWNLOADS_PATH = "F:\Games"
 
 # 3. Set to True to delete the original .zip/.rar archive after a successful
 #    installation. Set to False to keep it.
@@ -203,4 +203,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
