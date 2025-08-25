@@ -13,11 +13,11 @@ jobs:
     steps:
       # Step 1: Checks out your repository's code so the robot can use it
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # Step 2: Sets up Python on the Windows robot
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -29,9 +29,9 @@ jobs:
       - name: Build with PyInstaller
         run: pyinstaller --onefile mugen_installer.py
 
-      # Step 5: Uploads the final .exe so you can download it
+      # Step 5: Uploads the final .exe so you can download it (THIS IS THE FIX)
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: mugen-installer-exe
           path: dist/mugen_installer.exe
