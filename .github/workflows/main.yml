@@ -1,0 +1,37 @@
+# This is the name of your workflow
+name: Build MUGEN Installer for Windows
+
+# This allows you to run the workflow manually by pressing a button
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    # This tells GitHub to use a temporary Windows computer
+    runs-on: windows-latest
+
+    steps:
+      # Step 1: Checks out your repository's code so the robot can use it
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Sets up Python on the Windows robot
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      # Step 3: Installs the required Python libraries
+      - name: Install dependencies
+        run: pip install pyinstaller rarfile py7zr
+
+      # Step 4: Runs PyInstaller to create the .exe
+      - name: Build with PyInstaller
+        run: pyinstaller --onefile mugen_installer.py
+
+      # Step 5: Uploads the final .exe so you can download it
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: mugen-installer-exe
+          path: dist/mugen_installer.exe
