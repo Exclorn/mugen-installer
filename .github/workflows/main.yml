@@ -27,7 +27,7 @@ jobs:
 
       # Step 4: Runs PyInstaller to create the .exe
       - name: Build with PyInstaller
-        run: pyinstaller --onefile mugen_installer.py
+        run: pyinstaller --onefile mugen-installer.py
 
       # Step 5: Uploads the final .exe so you can download it (THIS IS THE FIX)
       - name: Upload artifact
