@@ -8,8 +8,8 @@ import json
 import traceback
 
 # ==============================================================================
-# MUGEN/IKEMEN GO Character Manager v2.7 - Diagnostic Edition
-# Added a diagnostic tool to inspect the roster file directly.
+# MUGEN/IKEMEN GO Character Manager v2.8 - Syntax Error Hotfix
+# Corrected the 'invalid syntax' error in the extract_archive function.
 # ==============================================================================
 
 def log_error_and_exit(e):
@@ -17,7 +17,7 @@ def log_error_and_exit(e):
     log_file_path = os.path.join(base_path, 'crash_log.txt')
     print(f"\nFATAL ERROR: A critical error occurred. Please check 'crash_log.txt' for details.")
     with open(log_file_path, 'w', encoding='utf-8') as f:
-        f.write("MUGEN Manager v2.7 Crash Report\n=================================\n\n")
+        f.write("MUGEN Manager v2.8 Crash Report\n=================================\n\n")
         f.write(traceback.format_exc())
     input("\nPress Enter to exit.")
     sys.exit(1)
@@ -26,7 +26,6 @@ def get_base_path():
     if getattr(sys, 'frozen', False): return os.path.dirname(sys.executable)
     else: return os.path.dirname(os.path.abspath(__file__))
 
-# ... (All other functions from v2.6 remain the same. Full code provided below for simplicity) ...
 def load_or_create_config(config_path):
     default_config = {
         "ENGINE_TYPE": "IKEMEN", 
@@ -173,11 +172,8 @@ def run_diagnostics(roster_path):
             with open(output_file, 'w', encoding='utf-8') as f: f.write(message)
             return
 
-        with open(roster_path, 'r', encoding='utf-8-sig') as f:
-            content = f.read()
-        
+        with open(roster_path, 'r', encoding='utf-8-sig') as f: content = f.read()
         print(f"-> Successfully read the roster file.")
-        
         data = json.loads(content)
         print("-> Successfully parsed file as JSON.")
 
@@ -193,7 +189,6 @@ def run_diagnostics(roster_path):
             message = "Error: The JSON file is valid, but it does not contain a 'Characters' key."
             print(message)
             with open(output_file, 'w', encoding='utf-8') as f: f.write(message)
-
     except Exception as e:
         message = f"A critical error occurred during diagnostics:\n\n{traceback.format_exc()}"
         print(message)
@@ -207,13 +202,23 @@ def find_def_file(char_folder_path):
     return None
 
 def extract_archive(archive_path, extract_to):
+    """
+    THIS IS THE FIXED FUNCTION
+    """
     try:
-        if archive_path.endswith('.zip'): with zipfile.ZipFile(archive_path, 'r') as z: z.extractall(extract_to)
-        elif archive_path.endswith('.rar'): with rarfile.RarFile(archive_path, 'r') as r: r.extractall(extract_to)
-        elif archive_path.endswith('.7z'): with py7zr.SevenZipFile(archive_path, 'r') as s: s.extractall(extract_to)
+        if archive_path.endswith('.zip'):
+            with zipfile.ZipFile(archive_path, 'r') as z:
+                z.extractall(extract_to)
+        elif archive_path.endswith('.rar'):
+            with rarfile.RarFile(archive_path, 'r') as r:
+                r.extractall(extract_to)
+        elif archive_path.endswith('.7z'):
+            with py7zr.SevenZipFile(archive_path, 'r') as s:
+                s.extractall(path=extract_to)
         return True
     except Exception as e:
-        print(f"   ERROR extracting {os.path.basename(archive_path)}: {e}"); return False
+        print(f"   ERROR extracting {os.path.basename(archive_path)}: {e}")
+        return False
 
 def find_character_folder(base_path):
     contents = os.listdir(base_path)
@@ -257,13 +262,14 @@ def main_loop():
         
         if choice == '5':
             run_diagnostics(roster_path)
-        else:
+        elif choice in ['1', '2', '3', '4']:
             simple_roster, full_roster_data = read_roster(roster_path)
             if choice == '1': list_characters(simple_roster, CHARS_FOLDER)
             elif choice == '2': add_characters(roster_path, CHARS_FOLDER, DOWNLOADS_PATH, config.get("CLEANUP_ARCHIVES_AFTER_ADD", True))
             elif choice == '3': delete_character(simple_roster, roster_path, full_roster_data, CHARS_FOLDER)
             elif choice == '4': print("Exiting."); break
-            else: print("Invalid option, please try again.")
+        else: 
+            print("Invalid option, please try again.")
         
         input("\nPress Enter to return to the menu...")
 
