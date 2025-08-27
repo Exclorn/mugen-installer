@@ -8,8 +8,8 @@ import json
 import traceback
 
 # ==============================================================================
-# MUGEN/IKEMEN GO Character Manager v2.6 - Intelligent Roster Management
-# Robust, intelligent, and preserves user's manual edits.
+# MUGEN/IKEMEN GO Character Manager v2.7 - Diagnostic Edition
+# Added a diagnostic tool to inspect the roster file directly.
 # ==============================================================================
 
 def log_error_and_exit(e):
@@ -17,7 +17,7 @@ def log_error_and_exit(e):
     log_file_path = os.path.join(base_path, 'crash_log.txt')
     print(f"\nFATAL ERROR: A critical error occurred. Please check 'crash_log.txt' for details.")
     with open(log_file_path, 'w', encoding='utf-8') as f:
-        f.write("MUGEN Manager v2.6 Crash Report\n=================================\n\n")
+        f.write("MUGEN Manager v2.7 Crash Report\n=================================\n\n")
         f.write(traceback.format_exc())
     input("\nPress Enter to exit.")
     sys.exit(1)
@@ -26,6 +26,7 @@ def get_base_path():
     if getattr(sys, 'frozen', False): return os.path.dirname(sys.executable)
     else: return os.path.dirname(os.path.abspath(__file__))
 
+# ... (All other functions from v2.6 remain the same. Full code provided below for simplicity) ...
 def load_or_create_config(config_path):
     default_config = {
         "ENGINE_TYPE": "IKEMEN", 
@@ -54,37 +55,29 @@ def get_roster_path(game_path, engine_type):
     return None
 
 def read_roster(roster_path):
-    """Intelligently reads the IKEMEN GO roster."""
-    simple_roster = []
-    full_roster_data = []
+    simple_roster, full_roster_data = [], []
     if not os.path.exists(roster_path): 
         print("Warning: Roster file not found.")
         return [], []
     try:
         with open(roster_path, 'r', encoding='utf-8-sig') as f:
             config_data = json.load(f)
-
         full_roster_data = config_data.get("Characters", [])
         if not isinstance(full_roster_data, list):
             print("Warning: 'Characters' section in roster is malformed.")
             return [], []
-
         for entry in full_roster_data:
             if isinstance(entry, dict) and "char" in entry:
-                # Normalize path and extract the folder name, which is the unique ID
                 char_path = entry["char"].replace('\\', '/')
                 path_parts = char_path.split('/')
-                # The folder name is always the second part, e.g., "chars/FOLDER_NAME/..."
                 if len(path_parts) > 1 and path_parts[0].lower() == 'chars':
                     simple_roster.append(path_parts[1])
-        
         return sorted(list(set(simple_roster))), full_roster_data
     except Exception as e:
         print(f"ERROR: Failed to read and parse roster file. Reason: {e}")
     return [], []
 
 def write_roster_ikemen(roster_path, new_full_roster_data):
-    """Writes the full roster data back to the config file."""
     try:
         with open(roster_path, 'r', encoding='utf-8-sig') as f:
             config_data = json.load(f)
@@ -119,7 +112,6 @@ def delete_character(roster, roster_path, full_roster_data, chars_folder):
         print("Deletion cancelled."); return
 
     print(f"-> Removing '{char_to_delete}' from the roster...")
-    # Intelligently filter the full list, preserving all original data
     new_full_roster_data = [entry for entry in full_roster_data if not (entry.get("char", "").replace('\\','/').startswith(f'chars/{char_to_delete}/'))]
     
     if write_roster_ikemen(roster_path, new_full_roster_data):
@@ -171,6 +163,42 @@ def add_characters(roster_path, chars_folder, downloads_path, cleanup):
         if cleanup: os.remove(archive_path)
         shutil.rmtree(temp_extract)
 
+def run_diagnostics(roster_path):
+    print("\n--- Running Roster Diagnostics ---")
+    output_file = os.path.join(get_base_path(), "roster_diagnostics.txt")
+    try:
+        if not os.path.exists(roster_path):
+            message = f"Error: Roster file does not exist at path:\n{roster_path}"
+            print(message)
+            with open(output_file, 'w', encoding='utf-8') as f: f.write(message)
+            return
+
+        with open(roster_path, 'r', encoding='utf-8-sig') as f:
+            content = f.read()
+        
+        print(f"-> Successfully read the roster file.")
+        
+        data = json.loads(content)
+        print("-> Successfully parsed file as JSON.")
+
+        if "Characters" in data:
+            print("-> Found the 'Characters' key.")
+            char_data = data["Characters"]
+            message = "--- Start of 'Characters' section ---\n\n"
+            message += json.dumps(char_data, indent=4)
+            message += "\n\n--- End of 'Characters' section ---"
+            with open(output_file, 'w', encoding='utf-8') as f: f.write(message)
+            print(f"Success! The content of the 'Characters' section has been saved to:\n{output_file}")
+        else:
+            message = "Error: The JSON file is valid, but it does not contain a 'Characters' key."
+            print(message)
+            with open(output_file, 'w', encoding='utf-8') as f: f.write(message)
+
+    except Exception as e:
+        message = f"A critical error occurred during diagnostics:\n\n{traceback.format_exc()}"
+        print(message)
+        with open(output_file, 'w', encoding='utf-8') as f: f.write(message)
+
 def find_def_file(char_folder_path):
     char_folder_name = os.path.basename(char_folder_path)
     if os.path.isfile(os.path.join(char_folder_path, f"{char_folder_name}.def")): return f"{char_folder_name}.def"
@@ -180,12 +208,9 @@ def find_def_file(char_folder_path):
 
 def extract_archive(archive_path, extract_to):
     try:
-        if archive_path.endswith('.zip'):
-            with zipfile.ZipFile(archive_path, 'r') as z: z.extractall(extract_to)
-        elif archive_path.endswith('.rar'):
-            with rarfile.RarFile(archive_path, 'r') as r: r.extractall(extract_to)
-        elif archive_path.endswith('.7z'):
-            with py7zr.SevenZipFile(archive_path, 'r') as s: s.extractall(extract_to)
+        if archive_path.endswith('.zip'): with zipfile.ZipFile(archive_path, 'r') as z: z.extractall(extract_to)
+        elif archive_path.endswith('.rar'): with rarfile.RarFile(archive_path, 'r') as r: r.extractall(extract_to)
+        elif archive_path.endswith('.7z'): with py7zr.SevenZipFile(archive_path, 'r') as s: s.extractall(extract_to)
         return True
     except Exception as e:
         print(f"   ERROR extracting {os.path.basename(archive_path)}: {e}"); return False
@@ -227,15 +252,18 @@ def main_loop():
         print("2. Add new character(s) from downloads folder")
         print("3. Delete a character")
         print("4. Exit")
-        choice = input("Please choose an option (1-4): ")
+        print("5. Run Roster Diagnostics")
+        choice = input("Please choose an option (1-5): ")
         
-        simple_roster, full_roster_data = read_roster(roster_path)
-
-        if choice == '1': list_characters(simple_roster, CHARS_FOLDER)
-        elif choice == '2': add_characters(roster_path, CHARS_FOLDER, DOWNLOADS_PATH, config.get("CLEANUP_ARCHIVES_AFTER_ADD", True))
-        elif choice == '3': delete_character(simple_roster, roster_path, full_roster_data, CHARS_FOLDER)
-        elif choice == '4': print("Exiting."); break
-        else: print("Invalid option, please try again.")
+        if choice == '5':
+            run_diagnostics(roster_path)
+        else:
+            simple_roster, full_roster_data = read_roster(roster_path)
+            if choice == '1': list_characters(simple_roster, CHARS_FOLDER)
+            elif choice == '2': add_characters(roster_path, CHARS_FOLDER, DOWNLOADS_PATH, config.get("CLEANUP_ARCHIVES_AFTER_ADD", True))
+            elif choice == '3': delete_character(simple_roster, roster_path, full_roster_data, CHARS_FOLDER)
+            elif choice == '4': print("Exiting."); break
+            else: print("Invalid option, please try again.")
         
         input("\nPress Enter to return to the menu...")
 
