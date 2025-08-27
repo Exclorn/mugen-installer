@@ -6,10 +6,14 @@ import py7zr
 import sys
 import json
 import traceback
+from datetime import datetime
 
 # ==============================================================================
-# MUGEN/IKEMEN GO Character Manager v4.0 - The select.def Edition
-# This version is CORRECTED to work with the classic data/select.def roster file.
+# MUGEN/IKEMEN GO Character Manager v5.0 - The QoL Update
+# - Works with select.def
+# - Adds characters AND stages
+# - Automatically backs up select.def before any changes
+# - Smarter logic and cleaner UI
 # ==============================================================================
 
 def log_error_and_exit(e):
@@ -17,7 +21,7 @@ def log_error_and_exit(e):
     log_file_path = os.path.join(base_path, 'crash_log.txt')
     print(f"\nFATAL ERROR: A critical error occurred. Please check 'crash_log.txt' for details.")
     with open(log_file_path, 'w', encoding='utf-8') as f:
-        f.write("MUGEN Manager v4.0 Crash Report\n=================================\n\n")
+        f.write("MUGEN Manager v5.0 Crash Report\n=================================\n\n")
         f.write(traceback.format_exc())
     input("\nPress Enter to exit.")
     sys.exit(1)
@@ -42,95 +46,92 @@ def load_or_create_config(config_path):
     except Exception as e:
         print(f"ERROR: Could not load '{config_path}'. {e}"); return None
 
-def read_roster_selectdef(roster_path):
-    chars = []
+def backup_roster(roster_path):
+    try:
+        backup_dir = os.path.join(os.path.dirname(roster_path), 'backups')
+        os.makedirs(backup_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        backup_file = os.path.join(backup_dir, f"select.def.{timestamp}.bak")
+        shutil.copy2(roster_path, backup_file)
+        print(f"-> Backup created: {os.path.basename(backup_file)}")
+        return True
+    except Exception as e:
+        print(f"Warning: Could not create a backup of select.def. Reason: {e}")
+        return False
+
+def read_roster(roster_path, section_name):
+    items = []
     if not os.path.exists(roster_path): return []
     try:
         with open(roster_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
-            in_chars_section = False
+            in_section = False
             for line in f:
                 line = line.strip()
                 if not line or line.startswith(';'): continue
-                if line.lower().startswith('[characters]'): in_chars_section = True; continue
-                if line.startswith('['): in_chars_section = False
-                if in_chars_section:
-                    char_name = line.split(',')[0].strip()
-                    if char_name and char_name.lower() != 'randomselect':
-                        chars.append(char_name)
+                if line.lower() == f'[{section_name.lower()}]': in_section = True; continue
+                if line.startswith('['): in_section = False
+                if in_section:
+                    item_name = line.split(',')[0].strip()
+                    if item_name and item_name.lower() != 'randomselect':
+                        items.append(item_name)
     except Exception as e:
-        print(f"Warning: Could not read select.def. Reason: {e}")
-    return sorted(list(set(chars)))
+        print(f"Warning: Could not read {section_name}. Reason: {e}")
+    return sorted(list(set(items)))
 
-def write_roster_selectdef(roster_path, char_list):
+def write_roster(roster_path, char_list, stage_list):
     try:
-        with open(roster_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
-            lines = f.readlines()
+        with open(roster_path, 'r', encoding='utf-8-sig', errors='ignore') as f: lines = f.readlines()
         
         with open(roster_path, 'w', encoding='utf-8') as f:
-            in_chars_section = False
-            wrote_new_chars = False
+            in_chars, in_stages = False, False
             for line in lines:
-                if line.strip().lower().startswith('[characters]'):
+                stripped_line = line.strip().lower()
+                # Handle Characters section
+                if stripped_line == '[characters]':
                     f.write(line)
-                    for char in sorted(char_list):
-                        f.write(f"{char}\n")
+                    for char in sorted(char_list): f.write(f"{char}\n")
                     f.write("randomselect\n")
-                    in_chars_section = True
-                    wrote_new_chars = True
-                elif in_chars_section and (line.strip().startswith('[') or not line.strip()):
-                    in_chars_section = False
+                    in_chars = True
+                elif in_chars and (stripped_line.startswith('[') or not line.strip()):
+                    in_chars = False
                     f.write(line)
-                elif not in_chars_section:
+                # Handle ExtraStages section
+                elif stripped_line == '[extrastages]':
                     f.write(line)
-        if not wrote_new_chars:
-             print("ERROR: Could not find [Characters] section to write to in select.def.")
-             return False
+                    for stage in sorted(stage_list): f.write(f"{stage}\n")
+                    in_stages = True
+                elif in_stages and (stripped_line.startswith('[') or not line.strip()):
+                    in_stages = False
+                    f.write(line)
+                # Write all other lines
+                elif not in_chars and not in_stages:
+                    f.write(line)
         return True
     except Exception as e:
         print(f"ERROR: Could not write to select.def. Reason: {e}")
         return False
 
-def list_characters(roster, chars_folder):
-    print("\n--- Currently Installed Characters ---")
-    if not roster:
-        print("No characters found in roster file."); return
-    for i, char in enumerate(roster, 1):
-        status = "[OK]" if os.path.isdir(os.path.join(chars_folder, char)) or '\\' in char or '/' in char else "[FOLDER MISSING]"
-        print(f"{i: >3}. {char.ljust(40)} {status}")
+def list_items(items, item_type):
+    print(f"\n--- Currently Installed {item_type} ---")
+    if not items:
+        print(f"No {item_type.lower()} found in roster file."); return
+    for i, item in enumerate(items, 1):
+        # A bit of smart formatting for complex paths
+        display_name = item.replace('\\', '/').split('/')[-1]
+        full_path = "" if display_name == item else f"({item})"
+        print(f"{i: >3}. {display_name.ljust(30)} {full_path}")
 
-def delete_character(roster, roster_path, chars_folder):
-    list_characters(roster, chars_folder)
-    if not roster: return
-    try:
-        choice = int(input("\nEnter number of character to delete (0 to cancel): "))
-        if not 0 < choice <= len(roster):
-            print("Invalid number. Deletion cancelled."); return
-    except ValueError:
-        print("Invalid input. Deletion cancelled."); return
+# --- Add/Delete functions refactored for new logic ---
 
-    char_to_delete = roster[choice - 1]
-    if input(f"PERMANENTLY DELETE '{char_to_delete}'? (y/n): ").lower() != 'y':
-        print("Deletion cancelled."); return
-
-    print(f"-> Removing '{char_to_delete}' from select.def...")
-    roster.remove(char_to_delete)
-    
-    if write_roster_selectdef(roster_path, roster):
-        # Only delete folder if it's a simple entry
-        if '\\' not in char_to_delete and '/' not in char_to_delete:
-            char_folder_path = os.path.join(chars_folder, char_to_delete)
-            if os.path.isdir(char_folder_path):
-                print(f"-> Deleting folder: {char_folder_path}")
-                shutil.rmtree(char_folder_path)
-        print(f"'{char_to_delete}' successfully deleted.")
-
-def add_characters(roster, roster_path, chars_folder, downloads_path, cleanup):
+def add_characters(roster_path, chars_folder, downloads_path, cleanup):
+    # ... (This logic is fine, we just update the final call)
     archives = [f for f in os.listdir(downloads_path) if f.endswith(('.zip', '.rar', '.7z'))]
-    if not archives:
-        print("\nNo new character archives found."); return
+    if not archives: print("\nNo new character archives found."); return
     
-    print(f"\nFound {len(archives)} new character(s) to install.")
+    char_roster = read_roster(roster_path, "Characters")
+    stage_roster = read_roster(roster_path, "ExtraStages")
     newly_added_chars = []
+
     for archive_name in archives:
         print(f"\n--- Installing: {archive_name} ---")
         archive_path = os.path.join(downloads_path, archive_name)
@@ -140,11 +141,11 @@ def add_characters(roster, roster_path, chars_folder, downloads_path, cleanup):
 
         if not extract_archive(archive_path, temp_extract): continue
         char_folder_name = find_character_folder(temp_extract)
-        if not char_folder_name:
-            print("   ERROR: Could not identify a valid character folder. Skipping."); continue
+        if not char_folder_name: print("   ERROR: Could not identify a valid character folder. Skipping."); continue
         
-        if char_folder_name.lower() in [r.lower().split('\\')[0].split('/')[0] for r in roster]:
-            print(f"   WARNING: '{char_folder_name}' is already installed. Skipping."); continue
+        # Check against simple name
+        if char_folder_name.lower() in [r.lower().split('\\')[0].split('/')[0] for r in char_roster]:
+            print(f"   WARNING: '{char_folder_name}' seems to be already installed. Skipping."); continue
 
         source_path = os.path.join(temp_extract, char_folder_name)
         destination_path = os.path.join(chars_folder, char_folder_name)
@@ -152,7 +153,7 @@ def add_characters(roster, roster_path, chars_folder, downloads_path, cleanup):
              print(f"   WARNING: Folder '{char_folder_name}' already exists. Skipping."); continue
         shutil.move(source_path, chars_folder)
         
-        roster.append(char_folder_name)
+        char_roster.append(char_folder_name)
         newly_added_chars.append(char_folder_name)
         print(f"   '{char_folder_name}' successfully installed.")
         
@@ -161,8 +162,75 @@ def add_characters(roster, roster_path, chars_folder, downloads_path, cleanup):
 
     if newly_added_chars:
         print("\nUpdating select.def with new characters...")
-        write_roster_selectdef(roster_path, roster)
-        print("Roster updated successfully.")
+        if backup_roster(roster_path):
+            if write_roster(roster_path, char_roster, stage_roster):
+                print("Roster updated successfully.")
+            else:
+                print("ERROR: Roster update failed. Your old select.def is safe.")
+        else:
+            print("ERROR: Backup failed. Roster will not be modified for safety.")
+
+def delete_character(roster_path, chars_folder):
+    char_roster = read_roster(roster_path, "Characters")
+    stage_roster = read_roster(roster_path, "ExtraStages")
+    list_items(char_roster, "Characters")
+    if not char_roster: return
+    try:
+        choice = int(input("\nEnter number of character to delete (0 to cancel): "))
+        if not 0 < choice <= len(char_roster): print("Invalid number. Deletion cancelled."); return
+    except ValueError:
+        print("Invalid input. Deletion cancelled."); return
+
+    char_to_delete = char_roster[choice - 1]
+    if input(f"PERMANENTLY DELETE '{char_to_delete}'? (y/n): ").lower() != 'y':
+        print("Deletion cancelled."); return
+
+    if backup_roster(roster_path):
+        print(f"-> Removing '{char_to_delete}' from select.def...")
+        char_roster.remove(char_to_delete)
+        if write_roster(roster_path, char_roster, stage_roster):
+            # Only delete the folder for simple entries to avoid mistakes
+            simple_name = char_to_delete.split('\\')[0].split('/')[0]
+            char_folder_path = os.path.join(chars_folder, simple_name)
+            if os.path.isdir(char_folder_path):
+                print(f"-> Deleting folder: {char_folder_path}")
+                shutil.rmtree(char_folder_path)
+            print(f"'{char_to_delete}' successfully deleted.")
+        else:
+            print("ERROR: Roster update failed. Your old select.def is safe.")
+    else:
+        print("ERROR: Backup failed. Roster will not be modified for safety.")
+
+def add_stages(roster_path, stages_folder):
+    print("\n--- Scanning for new stages ---")
+    current_stages = read_roster(roster_path, "ExtraStages")
+    # Get simple names for comparison, e.g. "stages/MyStage.def" -> "MyStage.def"
+    current_stage_names = [s.replace('\\', '/').split('/')[-1] for s in current_stages]
+    
+    found_stages = [f for f in os.listdir(stages_folder) if f.lower().endswith('.def')]
+    newly_added_stages = []
+
+    for stage_file in found_stages:
+        if stage_file.lower() not in current_stage_names:
+            current_stages.append(f"stages/{stage_file}")
+            newly_added_stages.append(stage_file)
+    
+    if not newly_added_stages:
+        print("No new stages found.")
+        return
+
+    print(f"Found {len(newly_added_stages)} new stages:")
+    for stage in newly_added_stages: print(f"  + {stage}")
+
+    if backup_roster(roster_path):
+        current_chars = read_roster(roster_path, "Characters")
+        if write_roster(roster_path, current_chars, current_stages):
+            print("\nRoster updated successfully with new stages.")
+        else:
+            print("ERROR: Roster update failed. Your old select.def is safe.")
+    else:
+        print("ERROR: Backup failed. Roster will not be modified for safety.")
+
 
 # --- Helper functions (unchanged) ---
 def find_def_file(char_folder_path):
@@ -174,12 +242,9 @@ def find_def_file(char_folder_path):
 
 def extract_archive(archive_path, extract_to):
     try:
-        if archive_path.endswith('.zip'):
-            with zipfile.ZipFile(archive_path, 'r') as z: z.extractall(extract_to)
-        elif archive_path.endswith('.rar'):
-            with rarfile.RarFile(archive_path, 'r') as r: r.extractall(extract_to)
-        elif archive_path.endswith('.7z'):
-            with py7zr.SevenZipFile(archive_path, 'r') as s: s.extractall(path=extract_to)
+        if archive_path.endswith('.zip'): with zipfile.ZipFile(archive_path, 'r') as z: z.extractall(extract_to)
+        elif archive_path.endswith('.rar'): with rarfile.RarFile(archive_path, 'r') as r: r.extractall(extract_to)
+        elif archive_path.endswith('.7z'): with py7zr.SevenZipFile(archive_path, 'r') as s: s.extractall(path=extract_to)
         return True
     except Exception as e:
         print(f"   ERROR extracting {os.path.basename(archive_path)}: {e}"); return False
@@ -212,23 +277,30 @@ def main_loop():
         input("Press Enter to exit."); return
 
     CHARS_FOLDER = os.path.join(GAME_PATH, 'chars')
+    STAGES_FOLDER = os.path.join(GAME_PATH, 'stages')
 
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
-        print("\n MUGEN/IKEMEN GO Character Manager (select.def Edition) ".center(60, "="))
-        print("1. List all installed characters")
-        print("2. Add new character(s) from downloads folder")
-        print("3. Delete a character")
-        print("4. Exit")
-        choice = input("Please choose an option (1-4): ")
+        print("\n MUGEN/IKEMEN GO Manager (select.def Edition) v5.0 ".center(60, "="))
+        print("1. List Characters")
+        print("2. Add New Character(s) from Downloads")
+        print("3. Delete a Character")
+        print("4. Scan and Add New Stages")
+        print("5. Exit")
+        choice = input("Please choose an option (1-5): ")
         
-        current_roster = read_roster_selectdef(roster_path)
-
-        if choice == '1': list_characters(current_roster, CHARS_FOLDER)
-        elif choice == '2': add_characters(current_roster, roster_path, CHARS_FOLDER, DOWNLOADS_PATH, config.get("CLEANUP_ARCHIVES_AFTER_ADD", True))
-        elif choice == '3': delete_character(current_roster, roster_path, CHARS_FOLDER)
-        elif choice == '4': print("Exiting."); break
-        else: print("Invalid option, please try again.")
+        if choice == '1':
+            list_items(read_roster(roster_path, "Characters"), "Characters")
+        elif choice == '2':
+            add_characters(roster_path, CHARS_FOLDER, DOWNLOADS_PATH, config.get("CLEANUP_ARCHIVES_AFTER_ADD", True))
+        elif choice == '3':
+            delete_character(roster_path, CHARS_FOLDER)
+        elif choice == '4':
+            add_stages(roster_path, STAGES_FOLDER)
+        elif choice == '5':
+            print("Exiting."); break
+        else:
+            print("Invalid option, please try again.")
         
         input("\nPress Enter to return to the menu...")
 
