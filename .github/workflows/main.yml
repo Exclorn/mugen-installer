@@ -27,11 +27,11 @@ jobs:
 
       # Step 4: Runs PyInstaller to create the .exe
       - name: Build with PyInstaller
-        run: pyinstaller --onefile mugen-installer.py
+        run: pyinstaller --onefile mugen_manager_v2.py
 
       # Step 5: Uploads the final .exe so you can download it
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: mugen-installer-exe
-          path: dist/mugen-installer.exe
+          path: dist/mugen_manager_v2.exe
